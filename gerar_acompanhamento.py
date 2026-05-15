@@ -20,12 +20,15 @@ MES_INICIAL  = 1        # 1 = janeiro
 QTD_MESES    = 12
 
 # Classes de ativo: (nome, cor, qtde de linhas em branco para ativos)
+# Para adicionar mais linhas a uma classe, basta aumentar o número.
+# Para criar uma nova classe, adicione uma linha nesta lista.
 CLASSES = [
     ("FUNDOS",                  "E6A817", 6),
     ("PREVIDÊNCIA INDIVIDUAL",  "6B7A1E", 6),
     ("CRÉDITO PRIVADO",         "2E9BD6", 6),
     ("OPERAÇÕES ESTRUTURADAS",  "BFA615", 4),
     ("CDB",                     "17B3C4", 6),
+    ("LCI / LCA",               "2E8B57", 6),
     ("POUPANÇA",                "C0392B", 3),
 ]
 
