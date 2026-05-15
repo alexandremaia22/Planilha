@@ -9,8 +9,12 @@ movimentação, rentabilidade em R$ e em %.
 import openpyxl
 from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
 from openpyxl.chart import LineChart, BarChart, Reference
+from openpyxl.chart.label import DataLabelList
+from openpyxl.chart.marker import Marker
 from openpyxl.formatting.rule import CellIsRule
 from openpyxl.utils import get_column_letter
+
+from xlsm import converter
 
 # ─────────────────────────────────────────
 # PARÂMETROS (ajuste conforme necessário)
@@ -374,31 +378,67 @@ def criar_planilha():
             f"{col}{primeira_res}:{col}{ultima_res}",
             CellIsRule(operator='greaterThan', formula=['0'], font=verde))
 
+    # ---- colunas auxiliares (ocultas) para os gráficos --------------------
+    # Convertem "" em NA() para que meses sem dados virem lacuna no gráfico
+    # em vez de cair para zero.
+    AUX_BRUTO, AUX_LIQ, AUX_PCT = 64, 65, 66
+    for col, txt in ((AUX_BRUTO, "Patrimônio Bruto"),
+                      (AUX_LIQ, "Patrimônio Líquido"),
+                      (AUX_PCT, "Rentabilidade Mensal (%)")):
+        ws.cell(row=RES + 1, column=col, value=txt)
+        ws.column_dimensions[get_column_letter(col)].hidden = True
+    for i in range(QTD_MESES):
+        row = primeira_res + i
+        ws.cell(row=row, column=AUX_BRUTO,
+                value=f'=IF({cref(2, row)}="",NA(),{cref(2, row)})')
+        ws.cell(row=row, column=AUX_LIQ,
+                value=f'=IF({cref(3, row)}="",NA(),{cref(3, row)})')
+        ws.cell(row=row, column=AUX_PCT,
+                value=f'=IF({cref(5, row)}="",NA(),{cref(5, row)})')
+
+    cats = Reference(ws, min_col=1, min_row=primeira_res, max_row=ultima_res)
+
     # ---- gráfico de linha: patrimônio bruto x líquido ---------------------
     linha = LineChart()
-    linha.title = "Evolução do Patrimônio"
+    linha.title = "Evolução do Patrimônio (R$)"
     linha.style = 12
-    linha.y_axis.title = "R$"
+    linha.height, linha.width = 9.5, 19
+    linha.y_axis.title = "Patrimônio (R$)"
+    linha.x_axis.title = "Mês"
     linha.y_axis.numFmt = 'R$ #,##0'
-    linha.width, linha.height = 20, 10
-    dados = Reference(ws, min_col=2, max_col=3,
+    linha.x_axis.delete = False
+    linha.y_axis.delete = False
+    linha.visible_cells_only = False
+    dados = Reference(ws, min_col=AUX_BRUTO, max_col=AUX_LIQ,
                       min_row=RES + 1, max_row=ultima_res)
-    cats = Reference(ws, min_col=1, min_row=primeira_res, max_row=ultima_res)
     linha.add_data(dados, titles_from_data=True)
     linha.set_categories(cats)
+    for s in linha.series:
+        s.marker = Marker(symbol='circle', size=6)
+        s.smooth = False
     ws.add_chart(linha, cref(8, RES))
 
     # ---- gráfico de barras: rentabilidade mensal --------------------------
     barra = BarChart()
+    barra.type = 'col'
     barra.title = "Rentabilidade Mensal (%)"
     barra.style = 10
+    barra.height, barra.width = 9.5, 19
+    barra.y_axis.title = "Rentabilidade (%)"
+    barra.x_axis.title = "Mês"
     barra.y_axis.numFmt = '0.0%'
-    barra.width, barra.height = 20, 10
-    dados2 = Reference(ws, min_col=5, max_col=5,
+    barra.x_axis.delete = False
+    barra.y_axis.delete = False
+    barra.gapWidth = 60
+    barra.visible_cells_only = False
+    dados2 = Reference(ws, min_col=AUX_PCT, max_col=AUX_PCT,
                        min_row=RES + 1, max_row=ultima_res)
     barra.add_data(dados2, titles_from_data=True)
     barra.set_categories(cats)
     barra.legend = None
+    barra.dataLabels = DataLabelList()
+    barra.dataLabels.showVal = True
+    barra.dataLabels.numFmt = '0.00%'
     ws.add_chart(barra, cref(8, RES + 21))
 
     # ══════════════════════════════════════════════════════════════════════
@@ -423,29 +463,36 @@ def criar_planilha():
         "2. Para cada classe, digite o nome dos ativos nas linhas em branco "
         "(coluna CLASSE / ATIVO).",
         "",
-        "3. Em cada mês preencha apenas 3 colunas por ativo:",
+        "3. Precisa de mais linhas em uma classe? Selecione uma célula de uma "
+        "linha de ativo dessa classe e clique no botão azul '+ Adicionar linha "
+        "de ativo' (no topo da aba). Uma nova linha é inserida já formatada e "
+        "com as fórmulas prontas.",
+        "     • O arquivo .xlsm precisa ter as macros habilitadas: ao abrir, "
+        "clique em 'Habilitar conteúdo'.",
+        "",
+        "4. Em cada mês preencha apenas 3 colunas por ativo:",
         "     • Valor Bruto      – valor de mercado antes de impostos.",
         "     • Valor Líquido    – valor já descontado o IR no resgate.",
         "                          (em investimentos ISENTOS, repita o valor bruto)",
         "     • Movimentação     – aportes com sinal +  e  resgates com sinal −  "
         "(deixe vazio se não houve).",
         "",
-        "4. As colunas Rentabilidade (R$) e Rentabilidade (%) são calculadas "
+        "5. As colunas Rentabilidade (R$) e Rentabilidade (%) são calculadas "
         "automaticamente:",
         "     Rentab. R$ = Valor Bruto do mês − Valor Bruto do mês anterior − "
         "Movimentação.",
         "     Assim, aportes e resgates NÃO são contados como rendimento.",
         "",
-        "5. A coluna 'Saldo Inicial (Bruto)' é a base do 1º mês. Preencha-a com "
+        "6. A coluna 'Saldo Inicial (Bruto)' é a base do 1º mês. Preencha-a com "
         "o valor antes do período acompanhado.",
         "",
-        "6. As linhas de classe e a linha PATRIMÔNIO TOTAL somam tudo "
+        "7. As linhas de classe e a linha PATRIMÔNIO TOTAL somam tudo "
         "sozinhas — não digite nada nelas.",
         "",
-        "7. Use os botões [-] / [+] à esquerda das linhas para recolher ou "
+        "8. Use os botões [-] / [+] à esquerda das linhas para recolher ou "
         "expandir os ativos de cada classe.",
         "",
-        "8. O bloco RESUMO e os gráficos no fim da aba se atualizam sozinhos e "
+        "9. O bloco RESUMO e os gráficos no fim da aba se atualizam sozinhos e "
         "podem ser usados no envio ao cliente.",
         "",
         "Observação: a diferença entre Valor Bruto e Valor Líquido mostra ao "
@@ -463,9 +510,10 @@ def criar_planilha():
 
     # ── salvar ────────────────────────────────────────────────────────────
     wb.active = ws
-    path = "/home/user/Planilha/acompanhamento_mensal.xlsx"
-    wb.save(path)
-    print(f"Planilha gerada: {path}")
+    base = "/home/user/Planilha/acompanhamento_mensal"
+    wb.save(base + ".xlsx")
+    converter(base + ".xlsx", base + ".xlsm")
+    print(f"Planilhas geradas:\n  {base}.xlsx\n  {base}.xlsm (com macro)")
 
 
 if __name__ == "__main__":
