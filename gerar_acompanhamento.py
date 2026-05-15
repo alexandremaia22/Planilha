@@ -219,8 +219,9 @@ def criar_planilha():
                 B = cref(cb, PATRIM_ROW)
                 P = cref(prior, PATRIM_ROW)
                 M = cref(cm, PATRIM_ROW)
-                cell.value = (f'=IF(OR({B}="",{P}="",({P}+{M})=0),"",'
-                              f'({B}-{P}-{M})/({P}+{M}))')
+                cell.value = (f'=IF(OR({B}="",{P}=""),"",'
+                              f'IF(({P}+N({M}))=0,"",'
+                              f'({B}-{P}-N({M}))/({P}+N({M}))))')
             estilo_celula(cell, fmt, bold=True, fill='D6E4F2', fg=NAVY)
 
     # ---- CLASSES + ATIVOS --------------------------------------------------
@@ -255,8 +256,9 @@ def criar_planilha():
                     B = cref(cb, header)
                     P = cref(prior, header)
                     M = cref(cm, header)
-                    cell.value = (f'=IF(OR({B}="",{P}="",({P}+{M})=0),"",'
-                                  f'({B}-{P}-{M})/({P}+{M}))')
+                    cell.value = (f'=IF(OR({B}="",{P}=""),"",'
+                                  f'IF(({P}+N({M}))=0,"",'
+                                  f'({B}-{P}-N({M}))/({P}+N({M}))))')
                 estilo_celula(cell, fmt, bold=True, fill=CINZA_H)
 
         # linhas de ativos (em branco, agrupadas/recolhíveis)
@@ -288,8 +290,9 @@ def criar_planilha():
                 estilo_celula(cellr, FMT_BRL, fill=zebra)
                 # rentabilidade %
                 cellp = ws.cell(row=rr, column=cp,
-                                value=(f'=IF(OR({B}="",{P}="",({P}+{M})=0),"",'
-                                       f'({B}-{P}-{M})/({P}+{M}))'))
+                                value=(f'=IF(OR({B}="",{P}=""),"",'
+                                       f'IF(({P}+N({M}))=0,"",'
+                                       f'({B}-{P}-N({M}))/({P}+N({M}))))'))
                 estilo_celula(cellp, FMT_PCT, fill=zebra)
 
     # ── FORMATAÇÃO CONDICIONAL (verde p/ ganho) ───────────────────────────
