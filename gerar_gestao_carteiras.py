@@ -17,6 +17,7 @@ from openpyxl.styles import Font, Alignment, Border, Side, PatternFill
 from openpyxl.formatting.rule import FormulaRule
 from openpyxl.worksheet.datavalidation import DataValidation
 from openpyxl.chart import DoughnutChart, Reference
+from openpyxl.chart.data_source import StrRef
 from openpyxl.chart.label import DataLabelList
 from openpyxl.worksheet.table import Table, TableStyleInfo
 
@@ -140,6 +141,17 @@ def rotulo_donut():
     dl.separator = "\n"
     dl.position = "outEnd"
     return dl
+
+
+def cat_para_strref(chart):
+    """Categorias de texto (nome de produto) precisam estar em strRef e
+    não numRef. Sem isso, com showCatName=True o Excel marca o arquivo
+    como corrompido."""
+    for s in chart.ser:
+        if s.cat and s.cat.numRef is not None:
+            ref = s.cat.numRef.f
+            s.cat.strRef = StrRef(f=ref)
+            s.cat.numRef = None
 
 
 # ─────────────────── GERADOR ───────────────────
@@ -357,6 +369,7 @@ def construir():
     rosca.set_categories(cats)
     rosca.dataLabels = rotulo_donut()
     rosca.legend = None
+    cat_para_strref(rosca)
     car.add_chart(rosca, "F3")
 
     # ---- lista de aplicações do cliente --------------------------------
@@ -521,6 +534,7 @@ def construir():
                                        max_row=DATA_FIM))
     rosca_at.dataLabels = rotulo_donut()
     rosca_at.legend = None
+    cat_para_strref(rosca_at)
     sug.add_chart(rosca_at, "G6")
 
     rosca_pr = DoughnutChart()
@@ -533,6 +547,7 @@ def construir():
                                        max_row=DATA_FIM))
     rosca_pr.dataLabels = rotulo_donut()
     rosca_pr.legend = None
+    cat_para_strref(rosca_pr)
     sug.add_chart(rosca_pr, "G28")
 
     # observações livres
