@@ -217,6 +217,7 @@ def criar():
         ("CPF\n(automático)", 18, '@'),
         ("rk", 6, '0'),
         ("Classe\n(automática)", 22, None),
+        ("chave", 4, None),
     ]
     for i, (txt, larg, _) in enumerate(colunas, 1):
         cab(apl, 2, i, txt)
@@ -225,13 +226,11 @@ def criar():
 
     cli_rng = f"Clientes!$A$3:$C${CLI_FIM}"
     sel_pen = "'Carteira do Cliente'!$B$4"     # Penumper selecionado
-    mapa_prd = f"'Mapa Produtos'!$A$3:$A$202"
-    mapa_sub = f"'Mapa Produtos'!$B$3:$B$202"
-    mapa_cla = f"'Mapa Produtos'!$C$3:$C$202"
+    mapa_tab = "'Mapa Produtos'!$A$4:$D$202"
 
     for r in range(3, APL_FIM + 1):
         zebra = ZEBRA if r % 2 else BRANCO
-        for col in range(1, 12):
+        for col in range(1, 13):
             c = apl.cell(row=r, column=col)
             c.fill = cor(zebra)
             c.border = borda()
@@ -252,14 +251,15 @@ def criar():
         apl.cell(row=r, column=10).value = (
             f'=IF($A{r}="","",IF($A{r}={sel_pen},'
             f'COUNTIF($A$3:$A{r},{sel_pen}),""))')
-        # classe: tenta PRODUTO+SUBPRODUTO específico; senão PRODUTO+'*';
-        # senão 'Não classificado'.
+        # L = chave: UPPER(TRIM(produto))&"|"&UPPER(TRIM(subproduto))
+        apl.cell(row=r, column=12).value = (
+            f'=IF($C{r}="","",'
+            f'UPPER(TRIM($C{r}))&"|"&UPPER(TRIM($D{r})))')
+        # K = classe: VLOOKUP da chave; fallback PRODUTO|*; senão 'Não classificado'
         apl.cell(row=r, column=11).value = (
             f'=IF($C{r}="","",'
-            f'IFERROR(INDEX({mapa_cla},'
-            f'MATCH($C{r}&"|"&$D{r},{mapa_prd}&"|"&{mapa_sub},0)),'
-            f'IFERROR(INDEX({mapa_cla},'
-            f'MATCH($C{r}&"|*",{mapa_prd}&"|"&{mapa_sub},0)),'
+            f'IFERROR(VLOOKUP($L{r},{mapa_tab},4,0),'
+            f'IFERROR(VLOOKUP(UPPER(TRIM($C{r}))&"|*",{mapa_tab},4,0),'
             f'"Não classificado")))')
         for col in (8, 9, 11):
             apl.cell(row=r, column=col).font = Font(size=10, italic=True,
@@ -276,8 +276,9 @@ def criar():
                     font=vermelho, fill=fill_verm))
 
     apl.column_dimensions['J'].hidden = True       # coluna auxiliar rk
+    apl.column_dimensions['L'].hidden = True       # coluna auxiliar chave
     apl.freeze_panes = "A3"
-    tb = Table(displayName="tblAplicacoes", ref=f"A2:K{APL_FIM}")
+    tb = Table(displayName="tblAplicacoes", ref=f"A2:L{APL_FIM}")
     tb.tableStyleInfo = TableStyleInfo(name="TableStyleLight9",
                                        showRowStripes=True)
     apl.add_table(tb)
@@ -333,37 +334,25 @@ def criar():
     # ---- alocação por classe -------------------------------------------
     LIN_CL0 = 11
     secao(car, 9, "ALOCAÇÃO POR CLASSE (atual)", 1, 6)
-    for col, txt in ((1, "Classe"), (2, "Alvo %"),
-                     (3, "Saldo (R$)"), (4, "% atual"),
-                     (5, "Dif %")):
+    for col, txt in ((1, "Classe"), (2, "Saldo (R$)"), (3, "% atual")):
         cab(car, 10, col, txt)
     for i, lab in enumerate(CLASSES):
         r = LIN_CL0 + i
         zebra = ZEBRA if i % 2 else BRANCO
-        car.cell(row=r, column=1, value=lab)
-        cc = car.cell(row=r, column=1)
+        cc = car.cell(row=r, column=1, value=lab)
         cc.fill = cor(zebra)
         cc.border = borda()
         cc.font = Font(size=10, bold=True, color=NAVY)
         cc.alignment = Alignment(horizontal='left', vertical='center',
                                  indent=1)
-        cb = car.cell(row=r, column=2)
-        cb.fill = cor(AMARELO)
-        cb.border = borda()
-        cb.font = Font(size=10)
-        cb.alignment = Alignment(horizontal='right', vertical='center')
-        cb.number_format = FMT_PCT
-        cc = car.cell(row=r, column=3,
+        cb = car.cell(row=r, column=2,
                       value=(f'=SUMIFS({A_SLD},{A_PEN},$B$4,'
                              f'{A_CLA},$A{r})'))
-        cc.number_format = FMT_BRL
-        cd = car.cell(row=r, column=4,
-                      value=f'=IFERROR($C{r}/$B$6,0)')
+        cb.number_format = FMT_BRL
+        cd = car.cell(row=r, column=3,
+                      value=f'=IFERROR($B{r}/$B$6,0)')
         cd.number_format = FMT_PCT
-        ce = car.cell(row=r, column=5,
-                      value=f'=IF($B{r}="","",$B{r}-$D{r})')
-        ce.number_format = FMT_PCT
-        for col in (3, 4, 5):
+        for col in (2, 3):
             cc = car.cell(row=r, column=col)
             cc.fill = cor(zebra)
             cc.border = borda()
@@ -371,37 +360,33 @@ def criar():
             cc.alignment = Alignment(horizontal='right', vertical='center')
     r_tot = LIN_CL0 + N_CLASSE
     r_ncl = r_tot + 1
-    for r, lab, f2, f3, f4 in (
+    for r, lab, f2, f3 in (
         (r_tot, "TOTAL CLASSIFICADO",
          f'=SUM(B{LIN_CL0}:B{r_tot-1})',
-         f'=SUM(C{LIN_CL0}:C{r_tot-1})',
-         f'=SUM(D{LIN_CL0}:D{r_tot-1})'),
-        (r_ncl, "Não classificado", '',
-         f'=$B$6-$C${r_tot}', f'=IFERROR($C{r_ncl}/$B$6,0)')):
+         f'=SUM(C{LIN_CL0}:C{r_tot-1})'),
+        (r_ncl, "Não classificado",
+         f'=$B$6-$B${r_tot}', f'=IFERROR($B{r_ncl}/$B$6,0)')):
         ca = car.cell(row=r, column=1, value=lab)
         ca.font = Font(bold=True, size=10, color=NAVY)
         ca.alignment = Alignment(horizontal='left', vertical='center',
                                  indent=1)
-        if f2 != '':
-            cb = car.cell(row=r, column=2, value=f2)
-            cb.number_format = FMT_PCT
+        c2 = car.cell(row=r, column=2, value=f2)
+        c2.number_format = FMT_BRL
         c3 = car.cell(row=r, column=3, value=f3)
-        c3.number_format = FMT_BRL
-        c4 = car.cell(row=r, column=4, value=f4)
-        c4.number_format = FMT_PCT
-        for col in (1, 2, 3, 4, 5):
+        c3.number_format = FMT_PCT
+        for col in (1, 2, 3):
             cc = car.cell(row=r, column=col)
             cc.fill = cor(CINZA_H)
             cc.border = borda()
-            if col in (2, 3, 4):
+            if col in (2, 3):
                 cc.font = Font(bold=True, size=10, color=NAVY)
                 cc.alignment = Alignment(horizontal='right',
                                          vertical='center')
 
     # destaca a linha "Não classificado" se o valor for > 0
     car.conditional_formatting.add(
-        f"A{r_ncl}:E{r_ncl}",
-        FormulaRule(formula=[f'$C${r_ncl}>0'],
+        f"A{r_ncl}:C{r_ncl}",
+        FormulaRule(formula=[f'$B${r_ncl}>0'],
                     font=Font(bold=True, color='B0301A'),
                     fill=fill_verm))
 
@@ -409,7 +394,7 @@ def criar():
     rosca = DoughnutChart()
     rosca.title = "Alocação por classe"
     rosca.height, rosca.width = 8, 11
-    dados = Reference(car, min_col=3, min_row=10, max_row=r_tot - 1)
+    dados = Reference(car, min_col=2, min_row=10, max_row=r_tot - 1)
     cats = Reference(car, min_col=1, min_row=LIN_CL0, max_row=r_tot - 1)
     rosca.add_data(dados, titles_from_data=True)
     rosca.set_categories(cats)
@@ -598,47 +583,71 @@ def criar():
     barra_liq.legend = None
     sug.add_chart(barra_liq, "H22")
 
-    # ---- otimizações realizadas (texto livre) --------------------------
-    R_OT = r_prop_tot + 4                # 37
-    secao(sug, R_OT, "OTIMIZAÇÕES REALIZADAS", 1, 14)
-    for r in range(R_OT + 1, R_OT + 6):
-        sug.merge_cells(start_row=r, start_column=1,
-                        end_row=r, end_column=14)
-        c = sug.cell(row=r, column=1)
-        c.fill = cor(AMARELO)
-        c.border = borda()
-        c.font = Font(size=10)
-        c.alignment = Alignment(horizontal='left', vertical='top',
-                                wrap_text=True, indent=1)
-        sug.row_dimensions[r].height = 22
+    # ---- movimentações sugeridas (foco: reduzir/aplicar/manter) --------
+    R_MV = r_prop_tot + 4                # 37
+    secao(sug, R_MV, "MOVIMENTAÇÕES SUGERIDAS", 1, 14)
+    heads_mv = ["Ação", "Aplicação atual / Ativo novo",
+                "Valor (R$)", "Racional"]
+    for col, txt, span in ((1, "Ação", 1),
+                           (2, "Aplicação atual / Ativo novo", 4),
+                           (6, "Valor (R$)", 1),
+                           (7, "Racional", 8)):
+        cab(sug, R_MV + 1, col, txt)
+        if span > 1:
+            sug.merge_cells(start_row=R_MV + 1, start_column=col,
+                            end_row=R_MV + 1, end_column=col + span - 1)
+    sug.row_dimensions[R_MV + 1].height = 24
 
-    # ---- racional por movimentação --------------------------------------
-    R_RC = R_OT + 7                      # 44
-    secao(sug, R_RC, "RACIONAL POR MOVIMENTAÇÃO", 1, 14)
-    cab(sug, R_RC + 1, 1, "Ativo")
-    sug.merge_cells(start_row=R_RC + 1, start_column=2,
-                    end_row=R_RC + 1, end_column=14)
-    cab(sug, R_RC + 1, 2, "Racional (objetivo e justificativa)")
-    for i in range(10):
-        r = R_RC + 2 + i
+    dv_acao = DataValidation(
+        type="list",
+        formula1='"Resgatar,Reduzir,Manter,Aplicar"',
+        allow_blank=True)
+    sug.add_data_validation(dv_acao)
+    dv_acao.add(f"A{R_MV+2}:A{R_MV+9}")
+
+    for i in range(8):
+        r = R_MV + 2 + i
+        # col A: Ação (dropdown)
         c = sug.cell(row=r, column=1)
-        c.fill = cor(AMARELO)
-        c.border = borda()
-        c.font = Font(size=10)
-        c.alignment = Alignment(horizontal='left', vertical='center',
-                                wrap_text=True, indent=1)
+        c.fill = cor(AMARELO); c.border = borda()
+        c.font = Font(size=10, bold=True, color=NAVY)
+        c.alignment = Alignment(horizontal='center', vertical='center')
+        # col B-E: Aplicação / Ativo (merged)
         sug.merge_cells(start_row=r, start_column=2,
-                        end_row=r, end_column=14)
+                        end_row=r, end_column=5)
         c2 = sug.cell(row=r, column=2)
-        c2.fill = cor(AMARELO)
-        c2.border = borda()
+        c2.fill = cor(AMARELO); c2.border = borda()
         c2.font = Font(size=10)
-        c2.alignment = Alignment(horizontal='left', vertical='top',
+        c2.alignment = Alignment(horizontal='left', vertical='center',
                                   wrap_text=True, indent=1)
-        sug.row_dimensions[r].height = 32
+        # col F: Valor
+        c3 = sug.cell(row=r, column=6)
+        c3.fill = cor(AMARELO); c3.border = borda()
+        c3.font = Font(size=10)
+        c3.alignment = Alignment(horizontal='right', vertical='center')
+        c3.number_format = FMT_BRL
+        # col G-N: Racional (merged)
+        sug.merge_cells(start_row=r, start_column=7,
+                        end_row=r, end_column=14)
+        c4 = sug.cell(row=r, column=7)
+        c4.fill = cor(AMARELO); c4.border = borda()
+        c4.font = Font(size=10)
+        c4.alignment = Alignment(horizontal='left', vertical='center',
+                                  wrap_text=True, indent=1)
+        sug.row_dimensions[r].height = 26
+
+    # colore o "Ação" — verde p/ Aplicar, vermelho p/ Resgatar/Reduzir
+    rng_acao = f"A{R_MV+2}:A{R_MV+9}"
+    sug.conditional_formatting.add(rng_acao,
+        FormulaRule(formula=[f'$A{R_MV+2}="Aplicar"'],
+                    font=Font(bold=True, color='1E7B34'),
+                    fill=cor(VERDE)))
+    sug.conditional_formatting.add(rng_acao,
+        FormulaRule(formula=[f'OR($A{R_MV+2}="Resgatar",$A{R_MV+2}="Reduzir")'],
+                    font=vermelho, fill=fill_verm))
 
     # ---- comparativo atual x sugerida ----------------------------------
-    R_CMP = R_RC + 13                    # 57
+    R_CMP = R_MV + 11                    # 48
     secao(sug, R_CMP, "COMPARATIVO: ATUAL x SUGERIDA", 1, 7)
     heads = ["Classe", "% Atual", "% Sugerido", "Saldo Atual (R$)",
              "Valor Sugerido (R$)", "Diferença (R$)", "Ação"]
@@ -651,9 +660,9 @@ def criar():
         cr = LIN_CL0 + i
         vals = [
             (1, f"='Carteira do Cliente'!A{cr}", None),
-            (2, f"='Carteira do Cliente'!D{cr}", FMT_PCT),
+            (2, f"='Carteira do Cliente'!C{cr}", FMT_PCT),
             (3, f'=IFERROR($E{r}/SUM($E$8:$E${r_prop_fim}),0)', FMT_PCT),
-            (4, f"='Carteira do Cliente'!C{cr}", FMT_BRL),
+            (4, f"='Carteira do Cliente'!B{cr}", FMT_BRL),
             (5, (f'=SUMIFS($E$8:$E${r_prop_fim},'
                  f'$A$8:$A${r_prop_fim},$A{r})'), FMT_BRL),
             (6, f'=$E{r}-$D{r}', FMT_BRL),
@@ -980,11 +989,12 @@ def criar():
     # ─────────────────────────────────────────────────────────────────────
     mpr = wb.create_sheet("Mapa Produtos")
     mpr.sheet_view.showGridLines = False
-    titulo(mpr, "MAPA DE PRODUTOS — PRODUTO / SUBPRODUTO → CLASSE", 4)
-    for col, larg in ((1, 28), (2, 34), (3, 22), (4, 6)):
+    titulo(mpr, "MAPA DE PRODUTOS — PRODUTO / SUBPRODUTO → CLASSE", 5)
+    for col, larg in ((1, 4), (2, 28), (3, 34), (4, 22), (5, 6)):
         mpr.column_dimensions[get_column_letter(col)].width = larg
+    mpr.column_dimensions['A'].hidden = True
 
-    obs = mpr.cell(row=2, column=1,
+    obs = mpr.cell(row=2, column=2,
                    value=("Edite, acrescente ou remova linhas para ajustar a "
                           "classificação. Use SUBPRODUTO = \"*\" para a regra "
                           "padrão de um PRODUTO; um SUBPRODUTO específico "
@@ -992,10 +1002,11 @@ def criar():
     obs.alignment = Alignment(horizontal='left', vertical='center',
                               wrap_text=True, indent=1)
     obs.font = Font(size=9, italic=True, color='5B6470')
-    mpr.merge_cells("A2:D2")
+    mpr.merge_cells("B2:E2")
     mpr.row_dimensions[2].height = 32
 
-    for col, txt in ((1, "Produto"), (2, "Subproduto"), (3, "Classe")):
+    for col, txt in ((1, "Chave"), (2, "Produto"),
+                     (3, "Subproduto"), (4, "Classe")):
         cab(mpr, 3, col, txt)
     mpr.row_dimensions[3].height = 22
 
@@ -1007,35 +1018,41 @@ def criar():
                   "Internacional,Previdência\""),
         allow_blank=True)
     mpr.add_data_validation(dv_cla)
-    dv_cla.add("C4:C202")
+    dv_cla.add("D4:D202")
 
     for i in range(200):                    # 200 linhas (3..202)
         r = 3 + i
         zebra = ZEBRA if i % 2 else BRANCO
-        for col in range(1, 4):
+        for col in range(1, 5):
             c = mpr.cell(row=r, column=col)
-            c.fill = cor(AMARELO if r > 3 else CINZA_H)
+            c.fill = cor(AMARELO if (r > 3 and col >= 2) else
+                         (CINZA_H if r == 3 else BRANCO))
             c.border = borda()
             c.font = Font(size=10, bold=(r == 3),
                           color=NAVY if r == 3 else '333333')
             c.alignment = Alignment(horizontal='left', vertical='center',
                                     indent=1)
+        # coluna A = Chave (calc): UPPER(TRIM(produto))&"|"&UPPER(TRIM(sub))
+        if r > 3:
+            mpr.cell(row=r, column=1,
+                     value=(f'=IF(B{r}="","",'
+                            f'UPPER(TRIM(B{r}))&"|"&UPPER(TRIM(C{r})))'))
 
-    # pré-carrega o mapa padrão
+    # pré-carrega o mapa padrão (escreve em B/C/D; A é fórmula)
     for i, (prd, sub, cla) in enumerate(MAPA_PRODUTOS):
         r = 4 + i
-        mpr.cell(row=r, column=1, value=prd)
-        mpr.cell(row=r, column=2, value=sub)
-        mpr.cell(row=r, column=3, value=cla)
+        mpr.cell(row=r, column=2, value=prd)
+        mpr.cell(row=r, column=3, value=sub)
+        mpr.cell(row=r, column=4, value=cla)
 
-    # destaca linhas com classe vazia / chave duplicada
+    # destaca linhas com chave duplicada
     mpr.conditional_formatting.add(
-        "A4:A202",
+        "B4:B202",
         FormulaRule(formula=[
-            'AND(A4<>"",COUNTIFS($A$4:$A$202,A4,$B$4:$B$202,B4)>1)'],
+            'AND(B4<>"",COUNTIFS($B$4:$B$202,B4,$C$4:$C$202,C4)>1)'],
             font=vermelho, fill=fill_verm))
 
-    mpr.freeze_panes = "A4"
+    mpr.freeze_panes = "B4"
 
     # ─────────────────────────────────────────────────────────────────────
     # ABA 8 — INSTRUÇÕES
@@ -1065,9 +1082,7 @@ def criar():
         "",
         "3. Aba 'Carteira do Cliente': escolha o cliente no menu suspenso. "
         "A planilha mostra o patrimônio total, a alocação por classe (com "
-        "gráfico de rosca) e a lista das aplicações daquele cliente. "
-        "A coluna 'Alvo %' aceita a alocação-alvo da carteira recomendada, "
-        "e a 'Dif %' mostra o desvio entre Alvo e Atual.",
+        "gráfico de rosca) e a lista das aplicações daquele cliente.",
         "     A linha 'Não classificado' fica destacada em vermelho quando "
         "houver saldo cujo Produto não está mapeado — para resolver, "
         "abra a aba 'Mapa Produtos' e cadastre o PRODUTO/SUBPRODUTO.",
@@ -1085,10 +1100,10 @@ def criar():
         "Classe, Ativo sugerido, Carência (dias), Liquidez (dias) e Valor. "
         "O banner 'Patrimônio Proposto' soma sozinho e os dois gráficos "
         "(composição por classe e distribuição de liquidez) se atualizam.",
-        "     Logo abaixo há campos livres para você descrever as Otimizações "
-        "Realizadas e o Racional por movimentação (objetivo, justificativa).",
-        "     O Comparativo no fim mostra, classe a classe, o % atual x o "
-        "% sugerido e quanto Aumentar ou Reduzir.",
+        "     No bloco 'Movimentações Sugeridas' você anota o que fazer "
+        "(Resgatar / Reduzir / Manter / Aplicar), o ativo e o racional — "
+        "é a parte apresentável ao cliente. O Comparativo no fim mostra, "
+        "classe a classe, o % atual x o % sugerido.",
         "",
         "6. Aba 'Planejamento': preencha os campos amarelos (idades, "
         "patrimônio, aplicação mensal, renda desejada, INSS, premissas de "
