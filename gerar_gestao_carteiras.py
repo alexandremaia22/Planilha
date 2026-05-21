@@ -127,6 +127,21 @@ def campo(ws, row, col, fmt=None, destaque=True):
     return c
 
 
+def rotulo_donut():
+    """Rótulos para gráfico de rosca: 'Produto: 12,3%' por fora das fatias.
+    Como o nome da categoria já aparece junto ao valor, a legenda fica
+    redundante e é removida em cima do chart pelo chamador."""
+    dl = DataLabelList()
+    dl.showCatName = True
+    dl.showPercent = True
+    dl.showVal = False
+    dl.showLegendKey = False
+    dl.showSerName = False
+    dl.separator = "\n"
+    dl.position = "outEnd"
+    return dl
+
+
 # ─────────────────── GERADOR ───────────────────
 def construir():
     wb = Workbook()
@@ -335,13 +350,13 @@ def construir():
     # gráfico de rosca
     rosca = DoughnutChart()
     rosca.title = "Alocação por produto"
-    rosca.height, rosca.width = 10, 13
+    rosca.height, rosca.width = 11, 16
     dados = Reference(car, min_col=2, min_row=10, max_row=r_tot - 1)
     cats  = Reference(car, min_col=1, min_row=LIN_CL0, max_row=r_tot - 1)
     rosca.add_data(dados, titles_from_data=True)
     rosca.set_categories(cats)
-    rosca.dataLabels = DataLabelList()
-    rosca.dataLabels.showPercent = True
+    rosca.dataLabels = rotulo_donut()
+    rosca.legend = None
     car.add_chart(rosca, "F3")
 
     # ---- lista de aplicações do cliente --------------------------------
@@ -498,27 +513,27 @@ def construir():
     # gráficos: rosca Atual e Proposta lado a lado
     rosca_at = DoughnutChart()
     rosca_at.title = "Alocação ATUAL"
-    rosca_at.height, rosca_at.width = 9, 11
+    rosca_at.height, rosca_at.width = 11, 14
     rosca_at.add_data(Reference(sug, min_col=2, min_row=7,
                                  max_row=DATA_FIM),
                       titles_from_data=True)
     rosca_at.set_categories(Reference(sug, min_col=1, min_row=8,
                                        max_row=DATA_FIM))
-    rosca_at.dataLabels = DataLabelList()
-    rosca_at.dataLabels.showPercent = True
+    rosca_at.dataLabels = rotulo_donut()
+    rosca_at.legend = None
     sug.add_chart(rosca_at, "G6")
 
     rosca_pr = DoughnutChart()
     rosca_pr.title = "Alocação PROPOSTA"
-    rosca_pr.height, rosca_pr.width = 9, 11
+    rosca_pr.height, rosca_pr.width = 11, 14
     rosca_pr.add_data(Reference(sug, min_col=4, min_row=7,
                                  max_row=DATA_FIM),
                       titles_from_data=True)
     rosca_pr.set_categories(Reference(sug, min_col=1, min_row=8,
                                        max_row=DATA_FIM))
-    rosca_pr.dataLabels = DataLabelList()
-    rosca_pr.dataLabels.showPercent = True
-    sug.add_chart(rosca_pr, "G24")
+    rosca_pr.dataLabels = rotulo_donut()
+    rosca_pr.legend = None
+    sug.add_chart(rosca_pr, "G28")
 
     # observações livres
     R_OBS = r_sug_tot + 3
