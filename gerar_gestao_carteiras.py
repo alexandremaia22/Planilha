@@ -16,7 +16,7 @@ from openpyxl.utils import get_column_letter
 from openpyxl.styles import Font, Alignment, Border, Side, PatternFill
 from openpyxl.formatting.rule import FormulaRule
 from openpyxl.worksheet.datavalidation import DataValidation
-from openpyxl.chart import DoughnutChart, Reference
+from openpyxl.chart import PieChart, Reference
 from openpyxl.chart.data_source import StrRef
 from openpyxl.chart.label import DataLabelList
 from openpyxl.worksheet.table import Table, TableStyleInfo
@@ -360,7 +360,7 @@ def construir():
                     fill=fill_verm))
 
     # gráfico de rosca
-    rosca = DoughnutChart()
+    rosca = PieChart()
     rosca.title = "Alocação por produto"
     rosca.height, rosca.width = 11, 16
     dados = Reference(car, min_col=2, min_row=10, max_row=r_tot - 1)
@@ -524,7 +524,7 @@ def construir():
                     font=vermelho, fill=fill_verm))
 
     # gráficos: rosca Atual e Proposta lado a lado
-    rosca_at = DoughnutChart()
+    rosca_at = PieChart()
     rosca_at.title = "Alocação ATUAL"
     rosca_at.height, rosca_at.width = 11, 14
     rosca_at.add_data(Reference(sug, min_col=2, min_row=7,
@@ -537,7 +537,7 @@ def construir():
     cat_para_strref(rosca_at)
     sug.add_chart(rosca_at, "G6")
 
-    rosca_pr = DoughnutChart()
+    rosca_pr = PieChart()
     rosca_pr.title = "Alocação PROPOSTA"
     rosca_pr.height, rosca_pr.width = 11, 14
     rosca_pr.add_data(Reference(sug, min_col=4, min_row=7,
