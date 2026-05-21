@@ -35,18 +35,49 @@ ANOS_TBL = 8            # colunas da tabela periódica (anos)
 CLI_FIM = 2 + LIN_CLI            # última linha de dados em Clientes
 APL_FIM = 2 + LIN_APL            # última linha de dados em Aplicacoes
 
-# Classes pré-cadastradas: (rótulo, filtro "contém" aplicado à coluna Produto)
+# Classes pré-cadastradas (mesmas do modelo de carteira recomendada).
+# A classificação de cada aplicação vem da aba 'Mapa Produtos'.
 CLASSES = [
-    ("Fundos",                 "FUNDOS"),
-    ("Crédito Privado",        "CRED"),
-    ("Letras (LCI/LCA)",       "LETRAS"),
-    ("CDB",                    "CDB"),
-    ("LCA (emissor direto)",   "LCA"),
-    ("Tesouraria / Outros",    "TESOURARIA"),
-    ("",                       ""),
-    ("",                       ""),
+    "Pós Fixado",
+    "Pré Fixado",
+    "Inflação",
+    "Crédito Privado",
+    "Multimercado",
+    "Renda Variável",
+    "Fundo Imobiliário",
+    "Internacional",
+    "Previdência",
 ]
 N_CLASSE = len(CLASSES)
+
+# Mapeamento padrão dos PRODUTOs do banco para as classes acima.
+# SUBPRODUTO "*" significa 'qualquer subproduto' (regra default).
+# Linhas com SUBPRODUTO específico têm prioridade sobre a regra default
+# do mesmo PRODUTO (ex.: TESOURO DIRETO | LFT → Pós Fixado mesmo com
+# TESOURO DIRETO | * → Inflação).
+MAPA_PRODUTOS = [
+    ("ACOES",                "*",         "Renda Variável"),
+    ("CDB",                  "*",         "Pós Fixado"),
+    ("COE",                  "*",         "Internacional"),
+    ("DIREITO E BONUS",      "*",         "Renda Variável"),
+    ("ETF",                  "*",         "Renda Variável"),
+    ("FUNDO IMOBILIARIO",    "*",         "Fundo Imobiliário"),
+    ("FUNDOS - TORO",        "*",         "Multimercado"),
+    ("FUNDOS DE INVESTIMENTO","*",        "Multimercado"),
+    ("LCA",                  "*",         "Pós Fixado"),
+    ("LCI",                  "*",         "Pós Fixado"),
+    ("LIG",                  "*",         "Pós Fixado"),
+    ("MIN",                  "*",         "Pós Fixado"),
+    ("POUPANCA",             "*",         "Pós Fixado"),
+    ("PREVIDENCIA PRIVADA",  "*",         "Previdência"),
+    ("PUBLICO",              "*",         "Inflação"),
+    ("TERMO",                "*",         "Renda Variável"),
+    ("TESOURARIA  SIGOM",    "*",         "Crédito Privado"),
+    ("TESOURO DIRETO",       "*",         "Inflação"),
+    ("TESOURO DIRETO",       "LFT",       "Pós Fixado"),
+    ("TESOURO DIRETO",       "LTN",       "Pré Fixado"),
+    ("TESOURO DIRETO",       "NTN-F",     "Pré Fixado"),
+]
 
 # ─────────────────────────────────────────
 # ESTILO
@@ -185,6 +216,7 @@ def criar():
         ("Nome\n(automático)", 34, None),
         ("CPF\n(automático)", 18, '@'),
         ("rk", 6, '0'),
+        ("Classe\n(automática)", 22, None),
     ]
     for i, (txt, larg, _) in enumerate(colunas, 1):
         cab(apl, 2, i, txt)
@@ -193,10 +225,13 @@ def criar():
 
     cli_rng = f"Clientes!$A$3:$C${CLI_FIM}"
     sel_pen = "'Carteira do Cliente'!$B$4"     # Penumper selecionado
+    mapa_prd = f"'Mapa Produtos'!$A$3:$A$202"
+    mapa_sub = f"'Mapa Produtos'!$B$3:$B$202"
+    mapa_cla = f"'Mapa Produtos'!$C$3:$C$202"
 
     for r in range(3, APL_FIM + 1):
         zebra = ZEBRA if r % 2 else BRANCO
-        for col in range(1, 11):
+        for col in range(1, 12):
             c = apl.cell(row=r, column=col)
             c.fill = cor(zebra)
             c.border = borda()
@@ -217,7 +252,16 @@ def criar():
         apl.cell(row=r, column=10).value = (
             f'=IF($A{r}="","",IF($A{r}={sel_pen},'
             f'COUNTIF($A$3:$A{r},{sel_pen}),""))')
-        for col in (8, 9):
+        # classe: tenta PRODUTO+SUBPRODUTO específico; senão PRODUTO+'*';
+        # senão 'Não classificado'.
+        apl.cell(row=r, column=11).value = (
+            f'=IF($C{r}="","",'
+            f'IFERROR(INDEX({mapa_cla},'
+            f'MATCH($C{r}&"|"&$D{r},{mapa_prd}&"|"&{mapa_sub},0)),'
+            f'IFERROR(INDEX({mapa_cla},'
+            f'MATCH($C{r}&"|*",{mapa_prd}&"|"&{mapa_sub},0)),'
+            f'"Não classificado")))')
+        for col in (8, 9, 11):
             apl.cell(row=r, column=col).font = Font(size=10, italic=True,
                                                     color='5B6470')
 
@@ -226,10 +270,14 @@ def criar():
         f"H3:I{APL_FIM}",
         FormulaRule(formula=['H3="NÃO CADASTRADO"'],
                     font=vermelho, fill=fill_verm))
+    apl.conditional_formatting.add(
+        f"K3:K{APL_FIM}",
+        FormulaRule(formula=['K3="Não classificado"'],
+                    font=vermelho, fill=fill_verm))
 
     apl.column_dimensions['J'].hidden = True       # coluna auxiliar rk
     apl.freeze_panes = "A3"
-    tb = Table(displayName="tblAplicacoes", ref=f"A2:J{APL_FIM}")
+    tb = Table(displayName="tblAplicacoes", ref=f"A2:K{APL_FIM}")
     tb.tableStyleInfo = TableStyleInfo(name="TableStyleLight9",
                                        showRowStripes=True)
     apl.add_table(tb)
@@ -242,6 +290,7 @@ def criar():
     A_SLD = f"Aplicacoes!$F$3:$F${APL_FIM}"
     A_IDA = f"Aplicacoes!$G$3:$G${APL_FIM}"
     A_RK  = f"Aplicacoes!$J$3:$J${APL_FIM}"
+    A_CLA = f"Aplicacoes!$K$3:$K${APL_FIM}"
 
     # ─────────────────────────────────────────────────────────────────────
     # ABA 3 — CARTEIRA DO CLIENTE
@@ -283,30 +332,38 @@ def criar():
 
     # ---- alocação por classe -------------------------------------------
     LIN_CL0 = 11
-    secao(car, 9, "ALOCAÇÃO POR PRODUTO / CLASSE", 1, 6)
-    for col, txt in ((1, "Classe"), (2, "Filtro (contém)"),
-                     (3, "Saldo (R$)"), (4, "% da carteira")):
+    secao(car, 9, "ALOCAÇÃO POR CLASSE (atual)", 1, 6)
+    for col, txt in ((1, "Classe"), (2, "Alvo %"),
+                     (3, "Saldo (R$)"), (4, "% atual"),
+                     (5, "Dif %")):
         cab(car, 10, col, txt)
-    for i, (lab, filt) in enumerate(CLASSES):
+    for i, lab in enumerate(CLASSES):
         r = LIN_CL0 + i
         zebra = ZEBRA if i % 2 else BRANCO
-        a = car.cell(row=r, column=1, value=lab)
-        b = car.cell(row=r, column=2, value=filt)
-        for col in (1, 2):
-            cc = car.cell(row=r, column=col)
-            cc.fill = cor(AMARELO)
-            cc.border = borda()
-            cc.font = Font(size=10)
-            cc.alignment = Alignment(horizontal='left', vertical='center',
-                                     indent=1)
+        car.cell(row=r, column=1, value=lab)
+        cc = car.cell(row=r, column=1)
+        cc.fill = cor(zebra)
+        cc.border = borda()
+        cc.font = Font(size=10, bold=True, color=NAVY)
+        cc.alignment = Alignment(horizontal='left', vertical='center',
+                                 indent=1)
+        cb = car.cell(row=r, column=2)
+        cb.fill = cor(AMARELO)
+        cb.border = borda()
+        cb.font = Font(size=10)
+        cb.alignment = Alignment(horizontal='right', vertical='center')
+        cb.number_format = FMT_PCT
         cc = car.cell(row=r, column=3,
-                      value=(f'=IF($B{r}="",0,SUMIFS({A_SLD},{A_PEN},$B$4,'
-                             f'{A_PRD},"*"&$B{r}&"*"))'))
+                      value=(f'=SUMIFS({A_SLD},{A_PEN},$B$4,'
+                             f'{A_CLA},$A{r})'))
         cc.number_format = FMT_BRL
         cd = car.cell(row=r, column=4,
                       value=f'=IFERROR($C{r}/$B$6,0)')
         cd.number_format = FMT_PCT
-        for col in (3, 4):
+        ce = car.cell(row=r, column=5,
+                      value=f'=IF($B{r}="","",$B{r}-$D{r})')
+        ce.number_format = FMT_PCT
+        for col in (3, 4, 5):
             cc = car.cell(row=r, column=col)
             cc.fill = cor(zebra)
             cc.border = borda()
@@ -314,27 +371,39 @@ def criar():
             cc.alignment = Alignment(horizontal='right', vertical='center')
     r_tot = LIN_CL0 + N_CLASSE
     r_ncl = r_tot + 1
-    for r, lab, f3, f4 in (
+    for r, lab, f2, f3, f4 in (
         (r_tot, "TOTAL CLASSIFICADO",
-         f'=SUM(C{LIN_CL0}:C{r_tot-1})', f'=SUM(D{LIN_CL0}:D{r_tot-1})'),
-        (r_ncl, "Não classificado",
+         f'=SUM(B{LIN_CL0}:B{r_tot-1})',
+         f'=SUM(C{LIN_CL0}:C{r_tot-1})',
+         f'=SUM(D{LIN_CL0}:D{r_tot-1})'),
+        (r_ncl, "Não classificado", '',
          f'=$B$6-$C${r_tot}', f'=IFERROR($C{r_ncl}/$B$6,0)')):
         ca = car.cell(row=r, column=1, value=lab)
         ca.font = Font(bold=True, size=10, color=NAVY)
         ca.alignment = Alignment(horizontal='left', vertical='center',
                                  indent=1)
+        if f2 != '':
+            cb = car.cell(row=r, column=2, value=f2)
+            cb.number_format = FMT_PCT
         c3 = car.cell(row=r, column=3, value=f3)
         c3.number_format = FMT_BRL
         c4 = car.cell(row=r, column=4, value=f4)
         c4.number_format = FMT_PCT
-        for col in (1, 2, 3, 4):
+        for col in (1, 2, 3, 4, 5):
             cc = car.cell(row=r, column=col)
             cc.fill = cor(CINZA_H)
             cc.border = borda()
-            if col in (3, 4):
+            if col in (2, 3, 4):
                 cc.font = Font(bold=True, size=10, color=NAVY)
                 cc.alignment = Alignment(horizontal='right',
                                          vertical='center')
+
+    # destaca a linha "Não classificado" se o valor for > 0
+    car.conditional_formatting.add(
+        f"A{r_ncl}:E{r_ncl}",
+        FormulaRule(formula=[f'$C${r_ncl}>0'],
+                    font=Font(bold=True, color='B0301A'),
+                    fill=fill_verm))
 
     # gráfico de rosca da alocação
     rosca = DoughnutChart()
@@ -907,7 +976,69 @@ def criar():
     tpr.freeze_panes = "B4"
 
     # ─────────────────────────────────────────────────────────────────────
-    # ABA 7 — INSTRUÇÕES
+    # ABA 7 — MAPA PRODUTOS  (PRODUTO/SUBPRODUTO → CLASSE)
+    # ─────────────────────────────────────────────────────────────────────
+    mpr = wb.create_sheet("Mapa Produtos")
+    mpr.sheet_view.showGridLines = False
+    titulo(mpr, "MAPA DE PRODUTOS — PRODUTO / SUBPRODUTO → CLASSE", 4)
+    for col, larg in ((1, 28), (2, 34), (3, 22), (4, 6)):
+        mpr.column_dimensions[get_column_letter(col)].width = larg
+
+    obs = mpr.cell(row=2, column=1,
+                   value=("Edite, acrescente ou remova linhas para ajustar a "
+                          "classificação. Use SUBPRODUTO = \"*\" para a regra "
+                          "padrão de um PRODUTO; um SUBPRODUTO específico "
+                          "tem prioridade sobre a regra padrão."))
+    obs.alignment = Alignment(horizontal='left', vertical='center',
+                              wrap_text=True, indent=1)
+    obs.font = Font(size=9, italic=True, color='5B6470')
+    mpr.merge_cells("A2:D2")
+    mpr.row_dimensions[2].height = 32
+
+    for col, txt in ((1, "Produto"), (2, "Subproduto"), (3, "Classe")):
+        cab(mpr, 3, col, txt)
+    mpr.row_dimensions[3].height = 22
+
+    # dropdown de Classe (linhas 4..202)
+    dv_cla = DataValidation(
+        type="list",
+        formula1=("\"Pós Fixado,Pré Fixado,Inflação,Crédito Privado,"
+                  "Multimercado,Renda Variável,Fundo Imobiliário,"
+                  "Internacional,Previdência\""),
+        allow_blank=True)
+    mpr.add_data_validation(dv_cla)
+    dv_cla.add("C4:C202")
+
+    for i in range(200):                    # 200 linhas (3..202)
+        r = 3 + i
+        zebra = ZEBRA if i % 2 else BRANCO
+        for col in range(1, 4):
+            c = mpr.cell(row=r, column=col)
+            c.fill = cor(AMARELO if r > 3 else CINZA_H)
+            c.border = borda()
+            c.font = Font(size=10, bold=(r == 3),
+                          color=NAVY if r == 3 else '333333')
+            c.alignment = Alignment(horizontal='left', vertical='center',
+                                    indent=1)
+
+    # pré-carrega o mapa padrão
+    for i, (prd, sub, cla) in enumerate(MAPA_PRODUTOS):
+        r = 4 + i
+        mpr.cell(row=r, column=1, value=prd)
+        mpr.cell(row=r, column=2, value=sub)
+        mpr.cell(row=r, column=3, value=cla)
+
+    # destaca linhas com classe vazia / chave duplicada
+    mpr.conditional_formatting.add(
+        "A4:A202",
+        FormulaRule(formula=[
+            'AND(A4<>"",COUNTIFS($A$4:$A$202,A4,$B$4:$B$202,B4)>1)'],
+            font=vermelho, fill=fill_verm))
+
+    mpr.freeze_panes = "A4"
+
+    # ─────────────────────────────────────────────────────────────────────
+    # ABA 8 — INSTRUÇÕES
     # ─────────────────────────────────────────────────────────────────────
     ins = wb.create_sheet("Instruções")
     ins.sheet_view.showGridLines = False
@@ -934,13 +1065,21 @@ def criar():
         "",
         "3. Aba 'Carteira do Cliente': escolha o cliente no menu suspenso. "
         "A planilha mostra o patrimônio total, a alocação por classe (com "
-        "gráfico) e a lista das aplicações daquele cliente.",
-        "     A linha 'Não classificado' indica saldo cujo Produto não casou "
-        "com nenhum filtro — ajuste os filtros da coluna B se isso acontecer.",
+        "gráfico de rosca) e a lista das aplicações daquele cliente. "
+        "A coluna 'Alvo %' aceita a alocação-alvo da carteira recomendada, "
+        "e a 'Dif %' mostra o desvio entre Alvo e Atual.",
+        "     A linha 'Não classificado' fica destacada em vermelho quando "
+        "houver saldo cujo Produto não está mapeado — para resolver, "
+        "abra a aba 'Mapa Produtos' e cadastre o PRODUTO/SUBPRODUTO.",
         "",
-        "4. Classes: na aba 'Carteira do Cliente' a coluna 'Filtro (contém)' "
-        "define como cada classe é somada. Ex.: o filtro FUNDOS soma todo "
-        "Produto que contenha 'FUNDOS'. Edite rótulos e filtros à vontade.",
+        "4. Aba 'Mapa Produtos' (classificação): cada linha mapeia um "
+        "PRODUTO (e opcionalmente um SUBPRODUTO específico) para uma das "
+        "9 classes (Pós Fixado, Pré Fixado, Inflação, Crédito Privado, "
+        "Multimercado, Renda Variável, Fundo Imobiliário, Internacional, "
+        "Previdência). SUBPRODUTO = \"*\" é a regra padrão de um PRODUTO; "
+        "um SUBPRODUTO específico tem prioridade (ex.: TESOURO DIRETO | "
+        "LFT → Pós Fixado mesmo com TESOURO DIRETO | * → Inflação). "
+        "Chaves duplicadas ficam destacadas em vermelho.",
         "",
         "5. Aba 'Carteira Sugerida' (proposta): monte a carteira recomendada — "
         "Classe, Ativo sugerido, Carência (dias), Liquidez (dias) e Valor. "
